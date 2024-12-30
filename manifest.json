@@ -1,0 +1,11 @@
+{
+	"id": "cooksync",
+	"name": "Cooksync",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Automatically imports Cooksync data to Obsidian.",
+	"author": "Cooksync",
+	"authorUrl": "https://cooksync.app",
+	"fundingUrl": "https://cooksync.app/pricing",
+	"isDesktopOnly": false
+}
