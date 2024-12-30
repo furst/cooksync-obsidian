@@ -9,7 +9,7 @@ import {
 	DataAdapter,
 } from "obsidian";
 
-const baseURL = process.env.COOKSYNC_SERVER_URL || "http://localhost:3000";
+const baseURL = "https://go.cooksync.app";
 
 interface AuthResponse {
 	token: string;
@@ -66,11 +66,6 @@ export default class Cooksync extends Plugin {
 		//TODO: add a command to resync one recipe
 
 		this.addSettingTab(new CooksyncSettingTab(this.app, this));
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log("setInterval"), 5 * 60 * 1000)
-		);
 	}
 
 	onunload() {}
@@ -179,8 +174,6 @@ export default class Cooksync extends Plugin {
 		data: any,
 		buttonContext?: ButtonComponent
 	): Promise<void> {
-		console.log("Downloading data", data);
-
 		this.fs = this.app.vault.adapter;
 
 		const checkIfFileExists = async (fileName: string) => {
@@ -189,16 +182,15 @@ export default class Cooksync extends Plugin {
 		};
 
 		for (const entry of data) {
-			const recipeTitle = entry.title.replaceAll("/", "");
+			const recipeTitle = entry.title.replace(/[\\/:*?"<>|]/g, "");
 			const fileName = `${this.settings.cooksyncDir}/${recipeTitle}.md`;
 			const processedFileName = normalizePath(fileName);
-			console.log("processedFileName", processedFileName);
 			try {
 				// ensure the directory exists
-				const dirPath = processedFileName
-					.replace(/\/*$/, "")
-					.replace(/^(.+)\/[^\/]*?$/, "$1");
-				console.log("dirPath", dirPath);
+				const dirPath = processedFileName.substring(
+					0,
+					processedFileName.lastIndexOf("/")
+				);
 				const exists = await this.fs.exists(dirPath);
 				if (!exists) {
 					await this.fs.mkdir(dirPath);
@@ -215,7 +207,6 @@ export default class Cooksync extends Plugin {
 					originalName = `${baseName} (${count}).${extension}`;
 					count++;
 				}
-				console.log("recipe to save:", originalName);
 				await this.fs.write(originalName, contentToSave);
 				this.settings.recipeIDs.push(entry.id);
 				this.settings.lastSyncTime = Date.now();
@@ -239,7 +230,6 @@ export default class Cooksync extends Plugin {
 			this.saveSettings();
 			this.requestData();
 		}
-		console.log("started sync");
 	}
 
 	getObsidianClientID() {
@@ -260,7 +250,6 @@ export default class Cooksync extends Plugin {
 
 	async getUserAuthToken(button: HTMLElement, attempt = 0) {
 		const uuid = this.getObsidianClientID();
-		console.log(uuid);
 
 		if (attempt === 0) {
 			window.open(`${baseURL}/export?uuid=${uuid}&service=obsidian`);
@@ -279,7 +268,6 @@ export default class Cooksync extends Plugin {
 		}
 		if (response && response.ok) {
 			data = await response.json();
-			console.log("token", data);
 		} else {
 			console.log(
 				"Cooksync plugin: bad response in getUserAuthToken: ",

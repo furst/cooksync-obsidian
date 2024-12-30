@@ -1,6 +1,6 @@
 {
 	"name": "cooksync-obsidian",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Cooksync Obsidian sync (https://cooksync.app)",
 	"main": "main.js",
 	"scripts": {
