@@ -406,8 +406,12 @@ class CooksyncSettingTab extends PluginSettingTab {
 				});
 		}
 
-		const help = containerEl.createEl("p");
-		help.innerHTML =
-			"Issues? Please email us at <a href='mailto:info@cooksync.app'>info@cooksync.app</a>.";
+		const help = containerEl.createEl("p", {
+			text: "Issues? Please email us at ",
+		});
+		help.createEl("a", {
+			text: "info@cooksync.app",
+			href: "mailto:info@cooksync.app",
+		});
 	}
 }
