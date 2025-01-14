@@ -6,7 +6,8 @@ import {
 	PluginSettingTab,
 	Setting,
 	normalizePath,
-	DataAdapter,
+	requestUrl,
+	RequestUrlResponse,
 } from "obsidian";
 
 const baseURL = "https://go.cooksync.app";
@@ -42,7 +43,6 @@ const DEFAULT_SETTINGS: CooksyncSettings = {
 
 export default class Cooksync extends Plugin {
 	settings: CooksyncSettings;
-	fs: DataAdapter;
 
 	async onload() {
 		await this.loadSettings();
@@ -89,8 +89,8 @@ export default class Cooksync extends Plugin {
 		};
 	}
 
-	getErrorMessageFromResponse(response?: Response) {
-		return `${response ? response.statusText : "Can't connect to server"}`;
+	getErrorMessageFromResponse(response?: RequestUrlResponse) {
+		return `${response ? response.text : "Can't connect to server"}`;
 	}
 
 	handleSyncSuccess(
@@ -123,7 +123,8 @@ export default class Cooksync extends Plugin {
 		const url = `${baseURL}/api/recipes/export/obsidian`;
 		let response, data: ExportRequestResponse;
 		try {
-			response = await fetch(url, {
+			response = await requestUrl({
+				url,
 				headers: {
 					...this.getAuthHeaders(),
 					"Content-Type": "application/json",
@@ -137,8 +138,8 @@ export default class Cooksync extends Plugin {
 		} catch (e) {
 			console.log("Cooksync: fetch failed in requestArchive: ", e);
 		}
-		if (response && response.ok) {
-			data = await response.json();
+		if (response && response.status <= 400) {
+			data = response.json;
 
 			// If data, then we have new data to add
 			if (data) {
@@ -174,11 +175,8 @@ export default class Cooksync extends Plugin {
 		data: any,
 		buttonContext?: ButtonComponent
 	): Promise<void> {
-		this.fs = this.app.vault.adapter;
-
 		const checkIfFileExists = async (fileName: string) => {
-			const exists = await this.fs.exists(fileName);
-			return exists;
+			return await this.app.vault.adapter.exists(fileName);
 		};
 
 		for (const entry of data) {
@@ -186,16 +184,14 @@ export default class Cooksync extends Plugin {
 			const fileName = `${this.settings.cooksyncDir}/${recipeTitle}.md`;
 			const processedFileName = normalizePath(fileName);
 			try {
-				// ensure the directory exists
 				const dirPath = processedFileName.substring(
 					0,
 					processedFileName.lastIndexOf("/")
 				);
-				const exists = await this.fs.exists(dirPath);
+				const exists = await this.app.vault.adapter.exists(dirPath);
 				if (!exists) {
-					await this.fs.mkdir(dirPath);
+					await this.app.vault.createFolder(dirPath);
 				}
-				// write the actual files
 				const content = entry.content;
 				let originalName = processedFileName;
 				const contentToSave = content;
@@ -207,7 +203,7 @@ export default class Cooksync extends Plugin {
 					originalName = `${baseName} (${count}).${extension}`;
 					count++;
 				}
-				await this.fs.write(originalName, contentToSave);
+				await this.app.vault.create(originalName, contentToSave);
 				this.settings.recipeIDs.push(entry.id);
 				this.settings.lastSyncTime = Date.now();
 				await this.saveSettings();
@@ -225,6 +221,8 @@ export default class Cooksync extends Plugin {
 	startSync() {
 		if (this.settings.isSyncing) {
 			new Notice("Cooksync sync already in progress");
+		} else if (!this.settings.token) {
+			// Do not start sync if not logged in
 		} else {
 			this.settings.isSyncing = true;
 			this.saveSettings();
@@ -258,7 +256,9 @@ export default class Cooksync extends Plugin {
 		let response;
 		let data: AuthResponse;
 		try {
-			response = await fetch(`${baseURL}/api/clients/token?uuid=${uuid}`);
+			response = await requestUrl({
+				url: `${baseURL}/api/clients/token?uuid=${uuid}`,
+			});
 		} catch (e) {
 			console.log(
 				"Cooksync plugin: fetch failed in getUserAuthToken: ",
@@ -266,8 +266,9 @@ export default class Cooksync extends Plugin {
 			);
 			new Notice("Authorization failed. Please try again");
 		}
-		if (response && response.ok) {
-			data = await response.json();
+
+		if (response && response.status <= 400) {
+			data = response.json;
 		} else {
 			console.log(
 				"Cooksync plugin: bad response in getUserAuthToken: ",
@@ -311,16 +312,9 @@ class CooksyncSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl("h1", { text: "Cooksync" });
-		containerEl.createEl("p", { text: "Created by " }).createEl("a", {
-			text: "Cooksync",
-			href: "https://cooksync.app",
-		});
-		containerEl.createEl("h2", { text: "Settings" });
-
 		if (!this.plugin.settings.token) {
 			new Setting(containerEl)
-				.setName("Connect Obsidian to Cooksync")
+				.setName("Connect to Cooksync")
 				.setDesc(
 					"Enable automatic syncing between Obsidian and Cooksync. Note: Requires Cooksync account"
 				)
@@ -341,17 +335,17 @@ class CooksyncSettingTab extends PluginSettingTab {
 
 		if (this.plugin.settings.token) {
 			new Setting(containerEl)
-				.setName("Sync your Cooksync data with Obsidian")
+				.setName("Sync your Cooksync data")
 				.setDesc(
-					"On first sync, the Cooksync plugin will create a new folder containing all your recipes"
+					"On first sync, a new folder containing all your recipes will be created"
 				)
 				.addButton((button) => {
 					button
 						.setCta()
 						.setTooltip(
-							"Once the sync begins, you can close this plugin page"
+							"Once the sync begins, you can close this page"
 						)
-						.setButtonText("Initiate Sync")
+						.setButtonText("Initiate sync")
 						.onClick(async () => {
 							if (this.plugin.settings.isSyncing) {
 								new Notice("Sync already in progress");
@@ -378,7 +372,7 @@ class CooksyncSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName("Customize base folder")
 				.setDesc(
-					"By default, the plugin will save all your recipes into a folder named Cooksync"
+					"By default, recipes will be saved into a folder named Cooksync"
 				)
 				.addText((text) =>
 					text
@@ -393,9 +387,9 @@ class CooksyncSettingTab extends PluginSettingTab {
 				);
 
 			new Setting(containerEl)
-				.setName("Sync automatically when Obsidian opens")
+				.setName("Sync automatically on open")
 				.setDesc(
-					"If enabled, Obsidian will automatically resync with Cooksync each time the app is opened"
+					"If enabled, Cooksync data will resync each time the app is opened"
 				)
 				.addToggle((toggle) => {
 					toggle.setValue(this.plugin.settings.triggerOnLoad);
