@@ -3,7 +3,7 @@
 	"name": "Cooksync",
 	"version": "1.0.3",
 	"minAppVersion": "1.0.0",
-	"description": "Automatically imports Cooksync data.",
+	"description": "Automatically imports recipes collected using Cooksync",
 	"author": "Cooksync",
 	"authorUrl": "https://cooksync.app",
 	"fundingUrl": "https://cooksync.app/pricing",
